@@ -1,0 +1,112 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: kubeflow-pipeline-test-
+  annotations: {pipelines.kubeflow.org/kfp_sdk_version: 1.0.3, pipelines.kubeflow.org/pipeline_compilation_time: '2020-10-18T01:33:25.192970',
+    pipelines.kubeflow.org/pipeline_spec: '{"description": "Kubeflow Pipeline Test",
+      "inputs": [{"name": "output"}, {"name": "project"}, {"default": "us-central1",
+      "name": "region", "optional": true}, {"default": "gs://ml-pipeline-playground/sfpd/train.csv",
+      "name": "train_data", "optional": true}, {"default": "gs://ml-pipeline-playground/sfpd/eval.csv",
+      "name": "eval_data", "optional": true}, {"default": "gs://ml-pipeline-playground/sfpd/schema.json",
+      "name": "schema", "optional": true}, {"default": "resolution", "name": "target",
+      "optional": true}, {"default": "200", "name": "rounds", "optional": true}, {"default":
+      "2", "name": "workers", "optional": true}, {"default": "ACTION", "name": "true_label",
+      "optional": true}], "name": "Kubeflow Pipeline Test"}'}
+  labels: {pipelines.kubeflow.org/kfp_sdk_version: 1.0.3}
+spec:
+  entrypoint: kubeflow-pipeline-test
+  templates:
+  - name: build
+    container:
+      args: [--project, '{{inputs.parameters.project}}', --mode, cloud, --preprocessed,
+        '{{inputs.parameters.preprocess-output}}', --preprocessed2, '{{inputs.parameters.preprocess-output}}']
+      image: gcr.io/compose-flask/build:v6
+      volumeMounts:
+      - {mountPath: /data, name: create-pvc}
+    inputs:
+      parameters:
+      - {name: create-pvc-name}
+      - {name: preprocess-output}
+      - {name: project}
+    outputs:
+      artifacts:
+      - {name: build-output, path: /tmp/output.txt}
+    volumes:
+    - name: create-pvc
+      persistentVolumeClaim: {claimName: '{{inputs.parameters.create-pvc-name}}'}
+  - name: create-pvc
+    resource:
+      action: create
+      manifest: |
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        metadata:
+          name: '{{workflow.name}}-my-pvc'
+        spec:
+          accessModes:
+          - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
+    outputs:
+      parameters:
+      - name: create-pvc-manifest
+        valueFrom: {jsonPath: '{}'}
+      - name: create-pvc-name
+        valueFrom: {jsonPath: '{.metadata.name}'}
+      - name: create-pvc-size
+        valueFrom: {jsonPath: '{.status.capacity.storage}'}
+  - name: kubeflow-pipeline-test
+    inputs:
+      parameters:
+      - {name: project}
+    dag:
+      tasks:
+      - name: build
+        template: build
+        dependencies: [create-pvc, preprocess]
+        arguments:
+          parameters:
+          - {name: create-pvc-name, value: '{{tasks.create-pvc.outputs.parameters.create-pvc-name}}'}
+          - {name: preprocess-output, value: '{{tasks.preprocess.outputs.parameters.preprocess-output}}'}
+          - {name: project, value: '{{inputs.parameters.project}}'}
+      - {name: create-pvc, template: create-pvc}
+      - name: preprocess
+        template: preprocess
+        dependencies: [create-pvc]
+        arguments:
+          parameters:
+          - {name: create-pvc-name, value: '{{tasks.create-pvc.outputs.parameters.create-pvc-name}}'}
+          - {name: project, value: '{{inputs.parameters.project}}'}
+  - name: preprocess
+    container:
+      args: [--project, '{{inputs.parameters.project}}', --mode, cloud]
+      image: gcr.io/compose-flask/hub:v6
+      volumeMounts:
+      - {mountPath: /data, name: create-pvc}
+    inputs:
+      parameters:
+      - {name: create-pvc-name}
+      - {name: project}
+    outputs:
+      parameters:
+      - name: preprocess-output
+        valueFrom: {path: /tmp/output.txt}
+      artifacts:
+      - {name: preprocess-output, path: /tmp/output.txt}
+    volumes:
+    - name: create-pvc
+      persistentVolumeClaim: {claimName: '{{inputs.parameters.create-pvc-name}}'}
+  arguments:
+    parameters:
+    - {name: output}
+    - {name: project}
+    - {name: region, value: us-central1}
+    - {name: train_data, value: 'gs://ml-pipeline-playground/sfpd/train.csv'}
+    - {name: eval_data, value: 'gs://ml-pipeline-playground/sfpd/eval.csv'}
+    - {name: schema, value: 'gs://ml-pipeline-playground/sfpd/schema.json'}
+    - {name: target, value: resolution}
+    - {name: rounds, value: '200'}
+    - {name: workers, value: '2'}
+    - {name: true_label, value: ACTION}
+  serviceAccountName: pipeline-runner
