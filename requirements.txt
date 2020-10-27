@@ -1,4 +1,4 @@
 pandas
 pytest
 numpy
-scikit-surprise
+lightfm
