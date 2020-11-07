@@ -1,11 +1,11 @@
 
 import setuptools
 
-with open("kubeflow-recommender/README.md", "r") as fh:
+with open("README.md", "r") as fh:
     long_description = fh.read()
 
 
-with open('kubeflow-recommender/requirements.txt') as f:
+with open('requirements.txt') as f:
     required = f.read().splitlines()
 
 setuptools.setup(
