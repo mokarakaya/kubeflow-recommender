@@ -12,3 +12,6 @@ class Preprocessor:
         df = df.drop(columns=['timestamp'])
         df.to_csv(self.target_filename, index=False)
         return df
+
+pre = Preprocessor('test/u.data', 'test/preprocessed.csv')
+df = pre.process()

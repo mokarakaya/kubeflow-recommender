@@ -29,7 +29,7 @@ def xgb_train_pipeline(
     )
 
     preprocess = dsl.ContainerOp(
-        name='preprocess',
+        name='preprocess_step',
         image='gcr.io/compose-flask/hub:v6',
         arguments=[
             '--project', project,
